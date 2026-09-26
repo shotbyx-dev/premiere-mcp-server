@@ -15,6 +15,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg # beat-detection tests decode via ffmpeg
       - run: npm run build
       - run: npm test
         env:

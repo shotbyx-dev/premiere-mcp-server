@@ -103,10 +103,11 @@ argument summary, outcome. Tokens and large/base64 payloads are redacted.
 
 ## Tool catalog
 
-35 Premiere tools: connection + auto-launch, modal probe, version/project info,
+36 Premiere tools: connection + auto-launch, modal probe, version/project info,
 `create_project`, open/save, project items + bins, `import_media`,
 `import_media_from_url`, sequences (list/activate/create), timeline insert /
-overwrite / trim / move / split / remove, playhead, markers, effects +
+overwrite / trim / move / split / remove, playhead, markers, `detect_beats`
+(BPM + beat-grid, optional one-call beat markers), effects +
 transitions (QE DOM), keyframes, audio levels/mute, MOGRT text overlays, AME
 export, frame export, raw ExtendScript escape hatch, and `search_tools`.
 
@@ -115,6 +116,28 @@ solid/camera, layer properties (single + batch), duplicate/delete layer,
 keyframes, expressions, effects + templates, `import_footage`,
 `import_media_from_url`, `save_project`, `ae_render_comp` (aerender), raw
 command escape hatch.
+
+## Beat detection
+
+`detect_beats` analyzes an audio file **on the Windows PC** and returns BPM, beat
+times (seconds, ms precision), and a 0..1 confidence score — pure TypeScript DSP
+(ffmpeg decode → spectral-flux onsets → autocorrelation tempo → beat-grid snap →
+time-domain transient refinement), no extra installs beyond ffmpeg (the installer
+adds it via winget).
+
+With `writeMarkers: true` the beats are also written to the active sequence as
+`"Beat N"` markers in a single bridge call — no per-marker round-trips.
+
+Typical "cut to the beat" flow:
+
+1. `detect_beats` with `audioPath: "C:\\Music\\track.mp3"`, `writeMarkers: true`
+   → e.g. `{ bpm: 96, beatCount: 214, beats: [0.496, 1.12, ...], confidence: 0.96 }`
+2. `split_clip` at each beat time on the video track to razor the footage on the music.
+3. Optional: `add_transition` / `trim_clip` between the new segments, then
+   `export_sequence` via Media Encoder.
+
+Tip: point `audioPath` at the song file in your project assets. Long songs take a
+few seconds to analyze; the tool runs locally, so no audio ever leaves the PC.
 
 ## Roadmap
 

@@ -17,6 +17,7 @@
 import { stat } from 'node:fs/promises';
 import * as z from 'zod/v4';
 import { downloadToAssets } from './download.js';
+import { detectBeats } from './beats.js';
 import { FileQueueBridge } from '../bridge/fileQueue.js';
 
 export const TICKS_PER_SECOND = 254016000;
@@ -594,6 +595,54 @@ export function buildPremiereTools(): ToolDef[] {
         15000
       );
       return typeof r === 'string' ? JSON.parse(r) : r;
+    },
+  });
+
+  add({
+    name: 'detect_beats',
+    title: 'Detect beats in an audio file',
+    description:
+      'Analyze an audio file on the Windows PC and return its BPM, beat times in ' +
+      'seconds, and a 0..1 confidence score. Pure TypeScript DSP (ffmpeg decode + ' +
+      'spectral-flux onset detection + autocorrelation tempo + beat-grid snapping); ' +
+      'no extra installs beyond ffmpeg. With writeMarkers=true the beats are also ' +
+      'written to the active sequence as "Beat N" markers in ONE bridge call, ready ' +
+      'for split_clip-at-beats editing. Typical flow: detect_beats(writeMarkers=true) ' +
+      '-> split_clip at each beat to cut footage to the music.',
+    inputSchema: z.object({
+      audioPath: z.string().describe('Full path to the audio file on the Windows PC'),
+      minBpm: z.number().min(30).max(300).default(70),
+      maxBpm: z.number().min(30).max(300).default(180),
+      writeMarkers: z
+        .boolean()
+        .default(false)
+        .describe('Also write "Beat N" markers to the active sequence (single bridge call)'),
+    }),
+    annotations: WRITE, // read-only when writeMarkers=false; annotated WRITE because it can mutate the timeline
+    run: async (args, ctx) => {
+      const det = await detectBeats(args.audioPath, {
+        minBpm: args.minBpm,
+        maxBpm: args.maxBpm,
+      });
+      let markersWritten = 0;
+      if (args.writeMarkers && det.beats.length > 0) {
+        const capped = det.beats.slice(0, 2000); // keep one script snappy
+        const r = await ctx.bridge.executeScript(
+          `${activeSeqGuard()}
+           var __times = ${JSON.stringify(capped)};
+           var __n = 0;
+           for (var i = 0; i < __times.length; i++) {
+             var __m = seq.markers.createMarker(Math.round(__times[i] * ${TICKS_PER_SECOND}));
+             __m.name = "Beat " + (i + 1);
+             __n++;
+           }
+           return JSON.stringify({ success: true, markersWritten: __n });`,
+          60000
+        );
+        const parsed = typeof r === 'string' ? JSON.parse(r) : r;
+        markersWritten = parsed.markersWritten ?? 0;
+      }
+      return { ...det, markersWritten };
     },
   });
 

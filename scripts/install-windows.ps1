@@ -45,6 +45,21 @@ function Require-Node {
   }
 }
 
+function Ensure-Ffmpeg {
+  $found = $false
+  try {
+    & ffmpeg -version 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $found = $true; Write-Host "  ffmpeg found." -ForegroundColor Green }
+  } catch { }
+  if (-not $found) {
+    Write-Host "  Installing ffmpeg via winget (may prompt)..." -ForegroundColor Cyan
+    winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
+    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    Write-Host "  ffmpeg installed." -ForegroundColor Green
+  }
+}
+
 function Install-ServerDeps {
   Write-Host "  Installing npm dependencies..." -ForegroundColor Cyan
   Push-Location $RepoRoot
@@ -144,6 +159,7 @@ function Install-Cloudflared([string]$token, [string]$hostname) {
 }
 
 Require-Node
+Ensure-Ffmpeg
 Install-ServerDeps
 Install-CepPanel
 Ensure-BridgeTempDir

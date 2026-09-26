@@ -1,4 +1,8 @@
-# premiere-mcp-server
+# PremierePilot by Shotbyx
+
+**Product name: PremierePilot** (technical repo name: `premiere-mcp-server` — to
+rename the product, search-replace "PremierePilot" across `site/`, `docs/`, and
+this README).
 
 **Created by Shotbyx.**
 

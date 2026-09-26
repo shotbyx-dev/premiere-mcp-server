@@ -1,0 +1,1 @@
+{"tools":[{"auth_required":false,"description":"Returns a concise overview of PremierePilot by Shotbyx — what it is, how to install it, which AI clients are supported, pricing, and links.","name":"getPremierePilotOverview","url":"https://shotbyx-dev.github.io/premiere-mcp-server/"}],"version":"1.0"}

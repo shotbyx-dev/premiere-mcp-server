@@ -114,3 +114,75 @@
     start();
   }
 })();
+
+/* WebMCP — W3C Web Machine Learning Community Group draft (early adopter).
+   Lets browser-side AI agents ask THIS MARKETING PAGE about PremierePilot
+   (install steps, supported clients, links). This is separate from the
+   product's own MCP server (the thing that actually drives Premiere Pro /
+   After Effects); the site is just agent-readable too.
+
+   Status: origin trial / behind flags in Chrome 149+ and Edge; the spec's
+   entry point moved from navigator.modelContext to document.modelContext
+   in May 2026, so we feature-detect both and never polyfill — if the API
+   is absent, the page works exactly as before.
+
+   There is deliberately NO declarative-form WebMCP on this site: the
+   declarative API (toolname/tooldescription attributes) only annotates
+   real <form> elements, and this static page has none. When a real form
+   lands (e.g. a newsletter signup), it should carry those attributes.
+
+   See site/README.md ("Agent-ready: WebMCP") for the full note. */
+
+(function () {
+  "use strict";
+
+  var modelContext =
+    (typeof document !== "undefined" && document.modelContext) ||
+    (typeof navigator !== "undefined" && navigator.modelContext) ||
+    null;
+
+  if (!modelContext || typeof modelContext.registerTool !== "function") {
+    return; // WebMCP not supported in this browser — site is unchanged.
+  }
+
+  var OVERVIEW = {
+    product: "PremierePilot by Shotbyx",
+    tagline: "Edit by talking.",
+    what: "A free, open-source MCP server that runs on your own Windows editing PC and lets your AI assistant drive Adobe Premiere Pro and After Effects by plain chat prompts — timelines, cuts, effects, beat-synced edits, renders.",
+    install: [
+      "Clone the repo on your Windows PC: git clone https://github.com/shotbyx-dev/premiere-mcp-server.git",
+      "Run .\\scripts\\install-windows.ps1 in PowerShell (add -TunnelToken and -PublicHostname for remote access via Cloudflare Tunnel).",
+      "Open the bridge panels: Premiere Window > Extensions > MCP Bridge; After Effects Window > MCP Bridge Auto.jsx (keep auto-run ON).",
+      "Connect your AI client with your tunnel URL + PREMIERE_MCP_TOKEN, then ask it to run verify_premiere_connection."
+    ],
+    ai_clients: {
+      meta_muse: "Lead platform — being submitted to the public connector directory at muse.ai/platform; custom-connector path works today.",
+      chatgpt: "Developer-mode manual setup (paid plan): enable Developer mode, paste your server URL, choose OAuth.",
+      claude: "Custom connector with OAuth."
+    },
+    cost: "Free and open source (MIT). No per-clip fees, no subscriptions.",
+    links: {
+      github: "https://github.com/shotbyx-dev/premiere-mcp-server",
+      privacy: "privacy.html",
+      terms: "terms.html"
+    }
+  };
+
+  try {
+    modelContext.registerTool({
+      name: "getPremierePilotOverview",
+      title: "Get PremierePilot overview",
+      description: "Returns a concise overview of PremierePilot by Shotbyx: what it is, how to install it, which AI clients are supported, pricing, and links. Use when the user asks about PremierePilot on this site.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: true },
+      execute: function () {
+        return { content: [{ type: "text", text: JSON.stringify(OVERVIEW, null, 2) }] };
+      }
+    });
+  } catch (err) {
+    // Early-preview API — never let it break the page.
+    if (window.console && window.console.warn) {
+      window.console.warn("WebMCP tool registration failed:", err);
+    }
+  }
+})();

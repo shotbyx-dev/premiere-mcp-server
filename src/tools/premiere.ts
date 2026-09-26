@@ -19,6 +19,7 @@ import * as z from 'zod/v4';
 import { downloadToAssets } from './download.js';
 import { detectBeats } from './beats.js';
 import { FileQueueBridge } from '../bridge/fileQueue.js';
+import type { ToolScope } from '../oauth/scopes.js';
 
 export const TICKS_PER_SECOND = 254016000;
 
@@ -41,6 +42,12 @@ export interface ToolDef {
   description: string;
   inputSchema: z.ZodTypeAny;
   annotations: ToolAnnotations;
+  /**
+   * Required OAuth scope. When omitted it is derived from annotations
+   * (destructiveHint -> admin, readOnlyHint -> read, else write), except
+   * `execute_extendscript` which is admin always.
+   */
+  scope?: ToolScope;
   run: (args: any, ctx: ToolContext) => Promise<unknown>;
 }
 
@@ -922,6 +929,7 @@ export function buildPremiereTools(): ToolDef[] {
       timeoutMs: z.number().int().min(1000).max(300000).default(60000),
     }),
     annotations: DESTRUCTIVE,
+    scope: 'admin', // explicit: arbitrary code execution is admin, always
     run: async (args, ctx) => {
       const r = await ctx.bridge.executeScript(args.script, args.timeoutMs);
       return typeof r === 'string' ? r : JSON.stringify(r);

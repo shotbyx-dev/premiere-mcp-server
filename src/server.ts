@@ -4,11 +4,17 @@
  * state (bridges, audit log) is created once in index.ts and closed over.
  */
 import { McpServer } from '@modelcontextprotocol/server';
+import type { AuthInfo } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { AuditLog, summarizeArgs } from './audit.js';
 import { AeBridge } from './bridge/aeBridge.js';
 import { FileQueueBridge } from './bridge/fileQueue.js';
 import type { ServerConfig } from './config.js';
+import {
+  requiredScopeForTool,
+  satisfiesScope,
+  type ToolScope,
+} from './oauth/scopes.js';
 import { buildAeTools } from './tools/aftereffects.js';
 import { buildPremiereTools, type ToolContext, type ToolDef } from './tools/premiere.js';
 
@@ -19,6 +25,21 @@ export interface ServerDeps {
   premiereBridge: FileQueueBridge;
   aeBridge: AeBridge | null;
   audit: AuditLog;
+}
+
+/**
+ * Scope gate for one tool call. Exported for unit tests.
+ * `authInfo` is the verified identity from the HTTP layer (undefined only
+ * when a transport does not carry auth, e.g. stdio — treated as no scopes).
+ */
+export function checkToolScope(
+  authInfo: Pick<AuthInfo, 'scopes'> | undefined,
+  tool: ToolDef
+): { ok: true } | { ok: false; required: ToolScope } {
+  const required = requiredScopeForTool(tool);
+  return satisfiesScope(authInfo?.scopes, required)
+    ? { ok: true }
+    : { ok: false, required };
 }
 
 function registerToolFamily(
@@ -37,9 +58,33 @@ function registerToolFamily(
         annotations: tool.annotations,
       },
       async (args: unknown, extra: unknown) => {
-        const caller =
-          (extra as { http?: { authInfo?: { clientId?: string } } })?.http?.authInfo
-            ?.clientId ?? 'unknown';
+        const authInfo = (
+          extra as { http?: { authInfo?: AuthInfo } }
+        )?.http?.authInfo;
+        const caller = authInfo?.clientId ?? 'unknown';
+        // OAuth scope gate: read/write/admin per tool (static bearer is
+        // admin-scoped; OAuth tokens carry their granted scopes).
+        const scopeCheck = checkToolScope(authInfo, tool);
+        if (!scopeCheck.ok) {
+          await audit.record({
+            caller,
+            tool: tool.name,
+            argsSummary: summarizeArgs(args),
+            outcome: 'error',
+            detail: `insufficient_scope: requires '${scopeCheck.required}'`,
+          });
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text:
+                  `Error in ${tool.name}: insufficient_scope — this tool requires ` +
+                  `the '${scopeCheck.required}' scope. Reconnect and approve it on the consent page.`,
+              },
+            ],
+            isError: true,
+          };
+        }
         const ctx = { ...baseCtx, caller } as ToolContext;
         try {
           const result = await tool.run(args, ctx);

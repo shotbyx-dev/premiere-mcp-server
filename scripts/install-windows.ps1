@@ -1,25 +1,41 @@
-# install-windows.ps1 — premiere-mcp-server Windows installer
+# install-windows.ps1 — PremierePilot by Shotbyx (premiere-mcp-server) Windows installer
 # Created by Shotbyx.
 #
-# Installs: Node.js 20+ (via winget if missing), npm dependencies, the Premiere
-# CEP bridge panel (+ After Effects panel when present), PlayerDebugMode, the
-# bridge temp dir, a bearer token (.env), and a logon scheduled task.
-# With -TunnelToken, also installs cloudflared (via winget) as a Windows service.
+# One-click installer. Steps:
+#   1. Preflight checks (Windows 10 1809+/11, winget, Premiere Pro present)
+#   2. Node.js 20 LTS (via winget if missing)
+#   3. ffmpeg (via winget if missing) — needed for detect_beats audio decode
+#   4. npm install + build
+#   5. Premiere CEP bridge panel (+ After Effects ScriptUI panel when AE present)
+#   6. PlayerDebugMode, bridge temp dir, bearer token (.env)
+#   7. Logon scheduled task "PremiereMCPServer"
+#   8. Server home dir %APPDATA%\PremierePilot (via pair.ps1 -Quiet)
+#   9. Weekly auto-update check task "PremierePilotUpdateCheck"
+#  10. Optional: cloudflared tunnel service (with -TunnelToken)
+#
+# Every step is idempotent — re-running the installer is safe.
 #
 # Usage:
-#   .\install-windows.ps1
+#   powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 #   .\install-windows.ps1 -TunnelToken "<token>" -PublicHostname "mcp.example.com"
+#   .\install-windows.ps1 -SkipAdobeCheck   # install server even without Premiere present
+#   .\install-windows.ps1 -Uninstall         # remove tasks + panels (asks about tunnel)
+#
+# NOTE: PowerShell 5.1 compatible. No secrets are written anywhere except the
+# local .env bearer token (never printed, never committed).
 
 param(
   [string]$TunnelToken = "",
   [string]$PublicHostname = "",
-  [int]$Port = 8787
+  [int]$Port = 8787,
+  [switch]$SkipAdobeCheck,
+  [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
 
 Write-Host ""
-Write-Host "  premiere-mcp-server installer" -ForegroundColor Cyan
+Write-Host "  PremierePilot by Shotbyx — installer" -ForegroundColor Cyan
 Write-Host "  Created by Shotbyx" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -27,6 +43,141 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $CepTarget = Join-Path $env:APPDATA "Adobe\CEP\extensions\MCPBridgeCEP"
 $BridgeTemp = Join-Path $env:TEMP "premiere-mcp-bridge"
 $EnvFile = Join-Path $RepoRoot ".env"
+$ServerTaskName = "PremiereMCPServer"
+$CreativeCloudUrl = "https://www.adobe.com/creativecloud/desktop-app.html"
+
+# ---------------------------------------------------------------- preflight ---
+
+function Show-PreflightError([string]$title, [string]$whatToDo) {
+  Write-Host ""
+  Write-Host ("  [X] " + $title) -ForegroundColor White -BackgroundColor Red
+  Write-Host ("  What to do: " + $whatToDo) -ForegroundColor Yellow
+  Write-Host ""
+}
+
+function Get-AdobeDir([string]$pattern) {
+  $base = "C:\Program Files\Adobe"
+  if (-not (Test-Path $base)) { return $null }
+  $hit = Get-ChildItem $base -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like $pattern } |
+    Sort-Object Name -Descending |
+    Select-Object -First 1
+  return $hit
+}
+
+function Invoke-Preflight {
+  Write-Host "  Preflight checks..." -ForegroundColor Cyan
+  $ok = $true
+
+  # Windows 10 1809 (build 17763) or newer / Windows 11
+  try {
+    $build = [int](Get-CimInstance Win32_OperatingSystem).BuildNumber
+  } catch { $build = 0 }
+  if ($build -lt 17763) {
+    Show-PreflightError "Windows 10 version 1809 (build 17763) or newer is required." `
+      "Update Windows via Settings > Windows Update, reboot, then re-run this installer."
+    $ok = $false
+  } else {
+    Write-Host ("  Windows build " + $build + " OK.") -ForegroundColor Green
+  }
+
+  # winget
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Show-PreflightError "winget was not found on this PC." `
+      "Install 'App Installer' from the Microsoft Store, then re-run this installer."
+    $ok = $false
+  } else {
+    Write-Host "  winget found." -ForegroundColor Green
+  }
+
+  # Premiere Pro (required unless skipped)
+  $pp = Get-AdobeDir "Adobe Premiere Pro*"
+  if (-not $pp -and -not $SkipAdobeCheck) {
+    Show-PreflightError "Adobe Premiere Pro was not found under C:\Program Files\Adobe." `
+      ("Install it from " + $CreativeCloudUrl + ", then re-run — or re-run with -SkipAdobeCheck.")
+    $ok = $false
+  } elseif ($pp) {
+    Write-Host ("  Premiere Pro found: " + $pp.Name) -ForegroundColor Green
+  } else {
+    Write-Host "  Premiere check skipped (-SkipAdobeCheck)." -ForegroundColor Yellow
+  }
+
+  # After Effects (optional — warn only)
+  $ae = Get-AdobeDir "Adobe After Effects*"
+  if (-not $ae) {
+    Write-Host "  After Effects not found — Premiere-only mode. Install AE later and re-run to add its panel." -ForegroundColor Yellow
+  } else {
+    Write-Host ("  After Effects found: " + $ae.Name) -ForegroundColor Green
+  }
+
+  # Soft admin warning (not fatal: logon tasks work as standard user; winget may prompt for elevation)
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+  if (-not $isAdmin) {
+    Write-Host "  Note: not running as Administrator — winget may show a UAC prompt." -ForegroundColor Yellow
+  }
+
+  if (-not $ok) { throw "Preflight checks failed. Fix the items above and re-run the installer." }
+  Write-Host "  Preflight passed." -ForegroundColor Green
+}
+
+# ---------------------------------------------------------------- uninstall ---
+
+function Invoke-Uninstall {
+  Write-Host "  Uninstalling PremierePilot..." -ForegroundColor Cyan
+
+  foreach ($t in @($ServerTaskName, "PremierePilotUpdateCheck")) {
+    schtasks /query /tn $t 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      schtasks /delete /tn $t /f 2>$null | Out-Null
+      Write-Host ("  Scheduled task '" + $t + "' removed.") -ForegroundColor Green
+    } else {
+      Write-Host ("  Scheduled task '" + $t + "' was not present.") -ForegroundColor DarkGray
+    }
+  }
+
+  if (Test-Path $CepTarget) {
+    Remove-Item -Recurse -Force $CepTarget -ErrorAction SilentlyContinue
+    Write-Host "  Premiere CEP bridge panel removed." -ForegroundColor Green
+  } else {
+    Write-Host "  Premiere CEP bridge panel was not installed." -ForegroundColor DarkGray
+  }
+
+  $aeRemoved = $false
+  $aeBase = Get-AdobeDir "Adobe After Effects*"
+  if ($aeBase) {
+    $aePanel = Join-Path $aeBase.FullName "Support Files\Scripts\ScriptUI Panels\mcp-bridge-auto.jsx"
+    if (Test-Path $aePanel) {
+      Remove-Item -Force $aePanel -ErrorAction SilentlyContinue
+      $aeRemoved = $true
+    }
+  }
+  if ($aeRemoved) { Write-Host "  After Effects bridge panel removed." -ForegroundColor Green }
+
+  # Tunnel service: ask, don't assume
+  if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
+    $svc = Get-Service -Name "cloudflared" -ErrorAction SilentlyContinue
+    if ($svc) {
+      $ans = Read-Host "  cloudflared tunnel service is installed. Remove it too? [y/N]"
+      if ($ans -match "^[Yy]") {
+        & cloudflared service uninstall
+        Write-Host "  cloudflared tunnel service removed (binary kept)." -ForegroundColor Green
+      } else {
+        Write-Host "  cloudflared tunnel service kept." -ForegroundColor Yellow
+      }
+    }
+  }
+
+  Write-Host ""
+  Write-Host "  Uninstall complete." -ForegroundColor Cyan
+  Write-Host "  Left in place (delete manually if you want a fully clean slate):" -ForegroundColor DarkGray
+  Write-Host ("   - repo files and .env bearer token: " + $RepoRoot) -ForegroundColor DarkGray
+  Write-Host ("   - server home dir: " + (Join-Path $env:APPDATA "PremierePilot")) -ForegroundColor DarkGray
+  Write-Host ""
+  Write-Host "  Created by Shotbyx" -ForegroundColor DarkGray
+}
+
+# ------------------------------------------------------------------ install ---
 
 function Require-Node {
   $found = $false
@@ -85,9 +236,7 @@ function Install-CepPanel {
   Write-Host "  PlayerDebugMode enabled (CSXS 9-15)." -ForegroundColor Green
   $aeSrc = Join-Path $RepoRoot "cep\aftereffects\mcp-bridge-auto.jsx"
   if (Test-Path $aeSrc) {
-    $aeBase = Get-ChildItem "C:\Program Files\Adobe" -Directory -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -like "Adobe After Effects*" } |
-      Sort-Object Name -Descending | Select-Object -First 1
+    $aeBase = Get-AdobeDir "Adobe After Effects*"
     if ($aeBase) {
       $aePanels = Join-Path $aeBase.FullName "Support Files\Scripts\ScriptUI Panels"
       New-Item -ItemType Directory -Force -Path $aePanels | Out-Null
@@ -113,7 +262,8 @@ function Ensure-Token {
   if (-not $token) {
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-    $token = [Convert]::ToHexString($bytes).ToLower()
+    # NOTE: [Convert]::ToHexString() does not exist on .NET Framework (PS 5.1) — build hex manually.
+    $token = -join ($bytes | ForEach-Object { $_.ToString('x2') })
     "PREMIERE_MCP_TOKEN=$token" | Out-File -FilePath $EnvFile -Encoding ascii -Append
     Write-Host "  Generated bearer token." -ForegroundColor Green
   } else {
@@ -125,22 +275,21 @@ function Ensure-Token {
 }
 
 function Install-ScheduledTask {
-  $taskName = "PremiereMCPServer"
-  schtasks /query /tn $taskName 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { schtasks /delete /tn $taskName /f | Out-Null }
+  schtasks /query /tn $ServerTaskName 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { schtasks /delete /tn $ServerTaskName /f | Out-Null }
   $indexJs = Join-Path $RepoRoot "dist\index.js"
   $nodePath = (Get-Command node).Source
   $action = "`"$nodePath`" `"$indexJs`""
-  schtasks /create /tn $taskName /tr $action /sc onlogon /rl limited /f | Out-Null
-  $xml = (schtasks /query /tn $taskName /xml) -join "`n"
+  schtasks /create /tn $ServerTaskName /tr $action /sc onlogon /rl limited /f | Out-Null
+  $xml = (schtasks /query /tn $ServerTaskName /xml) -join "`n"
   if ($xml -notmatch '<WorkingDirectory>') {
     $xml = $xml -replace '(<Exec>)', ('$1<WorkingDirectory>' + $RepoRoot + '</WorkingDirectory>')
   }
   $tmpXml = Join-Path $env:TEMP "premiere-mcp-task.xml"
   $xml | Out-File -FilePath $tmpXml -Encoding utf8
-  schtasks /create /tn $taskName /xml $tmpXml /f | Out-Null
+  schtasks /create /tn $ServerTaskName /xml $tmpXml /f | Out-Null
   Remove-Item $tmpXml -Force
-  Write-Host "  Scheduled task 'PremiereMCPServer' runs at logon." -ForegroundColor Green
+  Write-Host ("  Scheduled task '" + $ServerTaskName + "' runs at logon.") -ForegroundColor Green
 }
 
 function Install-Cloudflared([string]$token, [string]$hostname) {
@@ -158,6 +307,32 @@ function Install-Cloudflared([string]$token, [string]$hostname) {
   }
 }
 
+function Show-Summary {
+  Write-Host ""
+  Write-Host "  ==================================================" -ForegroundColor Cyan
+  Write-Host "   PremierePilot by Shotbyx — install complete" -ForegroundColor Cyan
+  Write-Host "  ==================================================" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "  Next steps:" -ForegroundColor Cyan
+  Write-Host "   1. Open Premiere Pro: Window > Extensions > MCP Bridge (the bridge starts automatically)."
+  Write-Host "      After Effects (if installed): Window > mcp-bridge-auto — keep auto-run ON."
+  Write-Host "   2. Keep this PC awake and signed in to Adobe Creative Cloud."
+  Write-Host "   3. Run scripts\pair.ps1 — it prints your connect URL and pairing code."
+  Write-Host "   4. Give the connect URL to your AI (Muse/ChatGPT) together with the bearer token"
+  Write-Host ("      stored in " + $EnvFile + " — never share the token publicly.")
+  Write-Host ("   5. Health check: http://127.0.0.1:" + $Port + "/health")
+  Write-Host "   6. A weekly auto-update check is scheduled ('PremierePilotUpdateCheck', Sundays 03:00)."
+  if ($PublicHostname) { Write-Host ("   7. Public MCP path: https://" + $PublicHostname + "/mcp") }
+  Write-Host ""
+  Write-Host "  Created by Shotbyx" -ForegroundColor DarkGray
+  Write-Host ""
+}
+
+# --------------------------------------------------------------------- main ---
+
+if ($Uninstall) { Invoke-Uninstall; exit 0 }
+
+Invoke-Preflight
 Require-Node
 Ensure-Ffmpeg
 Install-ServerDeps
@@ -165,15 +340,7 @@ Install-CepPanel
 Ensure-BridgeTempDir
 Ensure-Token
 Install-ScheduledTask
+& (Join-Path $PSScriptRoot "pair.ps1") -Quiet
+& (Join-Path $PSScriptRoot "check-update.ps1") -RegisterTask
 if ($TunnelToken -or $PublicHostname) { Install-Cloudflared $TunnelToken $PublicHostname }
-
-Write-Host ""
-Write-Host "  Done. Next steps:" -ForegroundColor Cyan
-Write-Host "  1. In Premiere: Window > Extensions > MCP Bridge (CEP) - bridge starts automatically."
-Write-Host "     In After Effects: the MCP Bridge Auto panel opens from Window menu; keep auto-run ON."
-Write-Host "  2. Keep this PC awake and signed in to Adobe CC."
-Write-Host ("  3. Health check on 127.0.0.1 port " + $Port + " path /health")
-Write-Host "  4. Your bearer token is in the repo .env file - keep it secret."
-if ($PublicHostname) { Write-Host ("  5. Public MCP path: /mcp on " + $PublicHostname) }
-Write-Host ""
-Write-Host "  Created by Shotbyx" -ForegroundColor DarkGray
+Show-Summary

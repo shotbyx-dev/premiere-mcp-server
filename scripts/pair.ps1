@@ -61,6 +61,17 @@ function Read-DotEnvValue([string]$name) {
   return ""
 }
 
+function Write-DotEnvValue([string]$name, [string]$value) {
+  if (-not (Test-Path $EnvFile)) { "" | Out-File -FilePath $EnvFile -Encoding ascii }
+  $lines = @(Get-Content $EnvFile)
+  $found = $false
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match ('^' + $name + '=')) { $lines[$i] = "$name=$value"; $found = $true }
+  }
+  if (-not $found) { $lines += "$name=$value" }
+  $lines | Out-File -FilePath $EnvFile -Encoding ascii
+}
+
 function Write-Box([string[]]$lines, [string]$color) {
   $w = 56
   $bar = '  +' + ('-' * ($w + 2)) + '+'
@@ -91,6 +102,14 @@ if ($Port -eq 0) {
 if (-not $PublicHostname) { $PublicHostname = Read-DotEnvValue "PUBLIC_HOSTNAME" }
 if (-not $PublicHostname) {
   $PublicHostname = (Read-Host "  Public hostname for remote access (e.g. mcp.example.com) — Enter to skip").Trim()
+}
+# Persist it: the server needs PREMIERE_MCP_PUBLIC_URL for the OAuth issuer and
+# the Host allow-list (without it, tunneled requests are rejected).
+if ($PublicHostname) {
+  $pubUrl = "https://" + $PublicHostname
+  Write-DotEnvValue "PUBLIC_HOSTNAME" $PublicHostname
+  Write-DotEnvValue "PREMIERE_MCP_PUBLIC_URL" $pubUrl
+  Write-Host "  Saved PREMIERE_MCP_PUBLIC_URL=$pubUrl (restart the server to apply)." -ForegroundColor Green
 }
 
 # --- token (masked only) ---

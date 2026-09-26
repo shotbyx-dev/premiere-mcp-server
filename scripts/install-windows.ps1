@@ -272,6 +272,35 @@ function Ensure-Token {
   if (-not (Select-String -Path $EnvFile -Pattern '^PORT=' -Quiet)) {
     "PORT=$Port" | Out-File -FilePath $EnvFile -Encoding ascii -Append
   }
+  # Owner passphrase gates the OAuth consent page (PREMIERE_MCP_OWNER_SECRET).
+  if (-not (Select-String -Path $EnvFile -Pattern '^PREMIERE_MCP_OWNER_SECRET=' -Quiet)) {
+    $sbytes = New-Object byte[] 24
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($sbytes)
+    $secret = -join ($sbytes | ForEach-Object { $_.ToString('x2') })
+    "PREMIERE_MCP_OWNER_SECRET=$secret" | Out-File -FilePath $EnvFile -Encoding ascii -Append
+    Write-Host "  Generated owner passphrase (consent page)." -ForegroundColor Green
+  } else {
+    Write-Host "  Existing owner passphrase kept." -ForegroundColor Green
+  }
+  # Public URL: the OAuth issuer + Host allow-list. REQUIRED for remote access —
+  # without it, tunneled requests are rejected (403) by the DNS-rebinding guard.
+  if ($PublicHostname) {
+    $pubUrl = "https://$PublicHostname"
+    if (Select-String -Path $EnvFile -Pattern '^PREMIERE_MCP_PUBLIC_URL=' -Quiet) {
+      (Get-Content $EnvFile) -replace '^PREMIERE_MCP_PUBLIC_URL=.*$', "PREMIERE_MCP_PUBLIC_URL=$pubUrl" |
+        Out-File -FilePath $EnvFile -Encoding ascii
+    } else {
+      "PREMIERE_MCP_PUBLIC_URL=$pubUrl" | Out-File -FilePath $EnvFile -Encoding ascii -Append
+    }
+    if (-not (Select-String -Path $EnvFile -Pattern '^PUBLIC_HOSTNAME=' -Quiet)) {
+      "PUBLIC_HOSTNAME=$PublicHostname" | Out-File -FilePath $EnvFile -Encoding ascii -Append
+    }
+    Write-Host "  Public URL set: $pubUrl" -ForegroundColor Green
+  } elseif (-not (Select-String -Path $EnvFile -Pattern '^PREMIERE_MCP_PUBLIC_URL=' -Quiet)) {
+    Write-Host "  WARNING: no -PublicHostname given, so PREMIERE_MCP_PUBLIC_URL is unset." -ForegroundColor Yellow
+    Write-Host "  Remote (tunnel) access will be rejected until you set it in .env" -ForegroundColor Yellow
+    Write-Host "  and restart the server. Run .\scripts\pair.ps1 to configure it." -ForegroundColor Yellow
+  }
 }
 
 function Install-ScheduledTask {

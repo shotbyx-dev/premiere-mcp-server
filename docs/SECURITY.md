@@ -8,9 +8,9 @@ something from the web.
 
 ---
 
-## 1. Exact capability surface — what the 59 tools can touch
+## 1. Exact capability surface — what the 60 tools can touch
 
-The server exposes **59 tools**: 35 for Premiere Pro, 23 for After Effects, plus
+The server exposes **60 tools**: 36 for Premiere Pro, 23 for After Effects, plus
 a `search_tools` catalog. They run as ExtendScript inside Premiere/AE through
 the CEP / ScriptUI bridge panels — which means your AI assistant gets
 **Premiere's full file access**:

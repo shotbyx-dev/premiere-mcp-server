@@ -1,0 +1,744 @@
+
+function __mcpEscapeString(value) {
+  // Built from character codes rather than backslash literals on purpose: this
+  // function is written inside a TypeScript template literal, where an escape
+  // is consumed once before it ever reaches Premiere.
+  var text = String(value);
+  var backslash = String.fromCharCode(92);
+  var out = '';
+  for (var i = 0; i < text.length; i++) {
+    var code = text.charCodeAt(i);
+    if (code === 34) { out += backslash + '"'; }
+    else if (code === 92) { out += backslash + backslash; }
+    else if (code === 8) { out += backslash + 'b'; }
+    else if (code === 9) { out += backslash + 't'; }
+    else if (code === 10) { out += backslash + 'n'; }
+    else if (code === 12) { out += backslash + 'f'; }
+    else if (code === 13) { out += backslash + 'r'; }
+    else if (code < 32 || code === 0x2028 || code === 0x2029) {
+      // Everything else below U+0020 has no short form and must go out as a
+      // \uXXXX escape. U+2028 and U+2029 are legal inside a JSON string but
+      // are line terminators to a JavaScript parser, so they are escaped too
+      // for any consumer that evaluates rather than parses the payload.
+      var hex = code.toString(16);
+      while (hex.length < 4) { hex = '0' + hex; }
+      out += backslash + 'u' + hex;
+    }
+    else { out += text.charAt(i); }
+  }
+  return out;
+}
+// Saved before anything can shadow it. Reading hasOwnProperty off the value being
+// serialised lets that value decide which of its own keys are emitted.
+var __mcpOwnProperty = Object.prototype.hasOwnProperty;
+function __mcpStringify(value) {
+  if (value === null) return 'null';
+  var valueType = typeof value;
+  if (valueType === 'string') return '"' + __mcpEscapeString(value) + '"';
+  if (valueType === 'number') return isFinite(value) ? String(value) : 'null';
+  if (valueType === 'boolean') return value ? 'true' : 'false';
+  if (value instanceof Array) {
+    var arrayParts = [];
+    for (var i = 0; i < value.length; i++) {
+      arrayParts.push(__mcpStringify(value[i]));
+    }
+    return '[' + arrayParts.join(',') + ']';
+  }
+  if (valueType === 'object') {
+    var objectParts = [];
+    for (var key in value) {
+      // Through the saved reference, because an own property named hasOwnProperty
+      // shadows the method. A non-function threw and lost the whole response; a
+      // function returning false was worse, emitting {} that parses cleanly while
+      // every field silently vanished.
+      //
+      // Switching to the reference would drop data if a host object carried its
+      // values on a prototype, so that was measured rather than assumed: across
+      // Application, Project, ProjectItem, Sequence, SequenceSettings, Track,
+      // TrackCollection, TrackItem and MarkerCollection on 26.0.2 -- 101 enumerable
+      // keys -- every one is an own property and none inherited. Keys are kept if
+      // the check itself throws: one extra inherited key is recoverable, dropping
+      // data is not.
+      var isOwn = true;
+      try { isOwn = __mcpOwnProperty.call(value, key); } catch (ownError) { isOwn = true; }
+      if (!isOwn) continue;
+      // Read once, and survive a read that throws. Guarding the ownership check
+      // while leaving the read unguarded still lost the whole response to a
+      // property that raises on access -- and a DOM object reaches here directly
+      // through evaluate_expression. Reading twice also ran any side effect twice.
+      var member;
+      try { member = value[key]; } catch (readError) { continue; }
+      if (typeof member === 'undefined' || typeof member === 'function') continue;
+      objectParts.push(__mcpStringify(String(key)) + ':' + __mcpStringify(member));
+    }
+    return '{' + objectParts.join(',') + '}';
+  }
+  return 'null';
+}
+if (typeof JSON === 'undefined') { JSON = {}; }
+// This engine has no JSON of its own. Measured on ExtendScript build 80.1060872:
+// neither JSON.parse nor JSON.stringify exists, so the object created on the line
+// above is fabricated by this prelude, and both directions installed below are the
+// only ones the engine will ever have. The parser is further down, after the
+// escaper it mirrors.
+//
+// Mind the wording here: the panel validates the whole script, prelude included,
+// against a list of patterns that includes a bare "process" followed by a dot.
+// A comment matching one of those makes the panel reject every call.
+//
+// It replaces one that escaped only backslash, quote, carriage return, line
+// feed and tab, passing every other control character through raw. Every tool
+// returns its payload through this function, so a single U+0001 in a clip or
+// marker name did not corrupt one field -- it made the entire response
+// unparseable and the whole call was lost.
+//
+// Assigned unconditionally rather than behind a typeof guard. On this engine
+// the guard can never be false; should a later host ship its own, a measured
+// escaper is still preferable to an unmeasured one. That makes the limits below
+// the limits, so they are listed in full. This covers what the tools return --
+// strings, finite numbers, booleans, null, arrays and plain objects -- and
+// differs from a conformant JSON.stringify:
+//
+//   Date              {} rather than an ISO string, and toJSON() is ignored.
+//   circular refs     recurses until the stack gives out; no clean TypeError.
+//   boxed primitives  new String/Number/Boolean serialise as objects.
+//   undefined, fn     at the top level return "null" rather than undefined.
+//   replacer, space   accepted positionally by callers and ignored; output is
+//                     never indented.
+//
+// Add any of those to a tool response and this needs extending first.
+JSON.stringify = __mcpStringify;
+// Recursive descent, because the engine has no JSON.parse either and the object
+// above is fabricated: installing only stringify leaves a JSON that answers
+// typeof but has no read direction, so a caller that feature-detects it gets a
+// missing-function error instead. add_text_overlay decodes a MOGRT text payload
+// that way and could never succeed.
+//
+// Recursive descent rather than the usual one-liner built on the dynamic code
+// evaluator: the panel rejects any script mentioning that function by name and
+// would refuse every call. This comment cannot spell it either, which the
+// generated-script test enforces. Characters are compared by code rather than by
+// literal for the same reason __mcpEscapeString does it -- a backslash written
+// here is consumed by the template literal before it reaches the host.
+// Two limits, measured rather than assumed. Nesting is bounded by the JavaScript
+// call stack: around 6,000 levels before it gives out, against no observed limit
+// in a modern engine. And each string is built one character at a time, which is
+// linear where the engine has rope strings and quadratic where it does not; both
+// are far outside the shape of a tool payload, but a caller feeding this arbitrary
+// third-party JSON should know. The host cost of either is unmeasured.
+function __mcpParse(text) {
+  var source = String(text);
+  var at = 0;
+
+  function fail(what) {
+    throw new Error('JSON.parse: ' + what + ' at position ' + at);
+  }
+  function skipWhitespace() {
+    while (at < source.length) {
+      var code = source.charCodeAt(at);
+      if (code === 32 || code === 9 || code === 10 || code === 13) { at++; } else { break; }
+    }
+  }
+  function expect(code) {
+    if (source.charCodeAt(at) !== code) fail('expected character ' + code);
+    at++;
+  }
+  function parseString() {
+    expect(34);
+    var out = '';
+    while (at < source.length) {
+      var code = source.charCodeAt(at);
+      if (code === 34) { at++; return out; }
+      if (code === 92) {
+        at++;
+        var esc = source.charCodeAt(at);
+        at++;
+        if (esc === 34) { out += String.fromCharCode(34); }
+        else if (esc === 92) { out += String.fromCharCode(92); }
+        else if (esc === 47) { out += '/'; }
+        else if (esc === 98) { out += String.fromCharCode(8); }
+        else if (esc === 102) { out += String.fromCharCode(12); }
+        else if (esc === 110) { out += String.fromCharCode(10); }
+        else if (esc === 114) { out += String.fromCharCode(13); }
+        else if (esc === 116) { out += String.fromCharCode(9); }
+        else if (esc === 117) {
+          var hex = source.substr(at, 4);
+          if (hex.length !== 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) fail('bad unicode escape');
+          out += String.fromCharCode(parseInt(hex, 16));
+          at += 4;
+        }
+        else fail('bad escape');
+        continue;
+      }
+      // Unescaped control characters are not legal inside a JSON string.
+      if (code < 32) fail('unescaped control character');
+      out += source.charAt(at);
+      at++;
+    }
+    fail('unterminated string');
+  }
+  // The escape below is doubled deliberately. A single backslash is consumed by
+  // the template literal, and the host then receives a dot that matches any
+  // character -- which accepted 012, 000 and 0123 as numbers on a live 26.0.2.
+  function parseNumber() {
+    var start = at;
+    if (source.charCodeAt(at) === 45) at++;
+    while (at < source.length && source.charCodeAt(at) >= 48 && source.charCodeAt(at) <= 57) at++;
+    if (source.charCodeAt(at) === 46) {
+      at++;
+      while (at < source.length && source.charCodeAt(at) >= 48 && source.charCodeAt(at) <= 57) at++;
+    }
+    var exponent = source.charCodeAt(at);
+    if (exponent === 101 || exponent === 69) {
+      at++;
+      var sign = source.charCodeAt(at);
+      if (sign === 43 || sign === 45) at++;
+      while (at < source.length && source.charCodeAt(at) >= 48 && source.charCodeAt(at) <= 57) at++;
+    }
+    var literal = source.substring(start, at);
+    if (!/^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$/.test(literal)) fail('bad number');
+    return Number(literal);
+  }
+  function parseWord() {
+    if (source.substr(at, 4) === 'true') { at += 4; return true; }
+    if (source.substr(at, 5) === 'false') { at += 5; return false; }
+    if (source.substr(at, 4) === 'null') { at += 4; return null; }
+    fail('unexpected token');
+  }
+  function parseValue() {
+    skipWhitespace();
+    var code = source.charCodeAt(at);
+    if (code === 34) return parseString();
+    if (code === 123) {
+      at++;
+      var object = {};
+      skipWhitespace();
+      if (source.charCodeAt(at) === 125) { at++; return object; }
+      for (;;) {
+        skipWhitespace();
+        var key = parseString();
+        skipWhitespace();
+        expect(58);
+        var member = parseValue();
+        if (key === '__proto__') {
+          // Measured on 26.0.2: this engine implements the __proto__ setter, so
+          // plain assignment grafts the payload onto the prototype instead of
+          // adding a key -- a value carrying {"__proto__":{"mTextString":"X"}}
+          // then reads back X from a field nobody set, and {"__proto__":null}
+          // yields an object whose String() throws.
+          //
+          // Object.defineProperty does not exist here either, so the key cannot be
+          // created as an ordinary property. It is dropped instead. That differs
+          // from a conformant parser, which defines an own property, and the
+          // difference is deliberate: losing one key is recoverable, silent field
+          // injection is not. Where defineProperty does exist the conformant
+          // behaviour is used.
+          if (typeof Object.defineProperty === 'function') {
+            try {
+              Object.defineProperty(object, key, {
+                value: member, enumerable: true, writable: true, configurable: true
+              });
+            } catch (defineError) { /* left out rather than assigned */ }
+          }
+        } else {
+          object[key] = member;
+        }
+        skipWhitespace();
+        if (source.charCodeAt(at) === 44) { at++; continue; }
+        expect(125);
+        return object;
+      }
+    }
+    if (code === 91) {
+      at++;
+      var array = [];
+      skipWhitespace();
+      if (source.charCodeAt(at) === 93) { at++; return array; }
+      for (;;) {
+        array.push(parseValue());
+        skipWhitespace();
+        if (source.charCodeAt(at) === 44) { at++; continue; }
+        expect(93);
+        return array;
+      }
+    }
+    if (code === 45 || (code >= 48 && code <= 57)) return parseNumber();
+    return parseWord();
+  }
+
+  var result = parseValue();
+  skipWhitespace();
+  if (at < source.length) fail('unexpected trailing content');
+  return result;
+}
+JSON.parse = __mcpParse;
+function __findSequence(id) {
+  if (!app.project || !app.project.sequences || id == null || id === "") return null;
+  var wanted = String(id);
+  var nameHits = [];
+  for (var i = 0; i < app.project.sequences.numSequences; i++) {
+    var seq = app.project.sequences[i];
+    if (String(seq.sequenceID) === wanted || __idsMatch(seq.sequenceID, wanted)) return seq;
+    try {
+      if (seq.projectItem && (__idsMatch(seq.projectItem.nodeId, wanted) || seq.projectItem.treePath === wanted)) return seq;
+    } catch (ePI) {}
+    if (seq.name === wanted) nameHits.push(seq);
+  }
+  if (nameHits.length) return nameHits[0];
+  var item = __findProjectItem(wanted);
+  if (item) {
+    for (var j = 0; j < app.project.sequences.numSequences; j++) {
+      var s2 = app.project.sequences[j];
+      try {
+        if (s2.projectItem === item) return s2;
+        if (s2.projectItem && __idsMatch(s2.projectItem.nodeId, item.nodeId)) return s2;
+      } catch (e2) {}
+      if (s2.name === item.name) return s2;
+    }
+  }
+  return null;
+}
+function __qeSequenceLookup(seq) {
+  if (!seq) return null;
+  var count = 0;
+  try { count = qe.project.numSequences; } catch (eCount) { return null; }
+  for (var qi = 0; qi < count; qi++) {
+    // Each index is guarded separately: qe.project.numSequences can report more
+    // sequences than getSequenceAt() will actually return, and a throw at one
+    // index must not abort the scan before the target index is reached.
+    try {
+      var candidate = qe.project.getSequenceAt(qi);
+      if (candidate && String(candidate.guid) === String(seq.sequenceID)) return candidate;
+    } catch (eAt) {}
+  }
+  // getSequenceAt() does not expose every sequence: one created by
+  // duplicate_sequence and never opened in a timeline is invisible to it, even
+  // while it is the active sequence. getActiveSequence() still returns a
+  // working handle in that case — verified against 26.0.2, guid and all — so
+  // fall back to it, but only once the guid confirms it is the sequence that
+  // was asked for. Addressing the wrong one is the bug this helper exists to
+  // prevent.
+  try {
+    var activeCandidate = qe.project.getActiveSequence();
+    if (activeCandidate && String(activeCandidate.guid) === String(seq.sequenceID)) return activeCandidate;
+  } catch (eActive) {}
+  return null;
+}
+function __activateSequenceForQE(seq) {
+  if (!seq) return;
+  // Premiere 26: Sequence.openInTimeline is missing, and getSequenceAt throws
+  // "Unknown error exception" for every index. QE can still address a sequence
+  // after it is the active timeline. openSequence(id) and assigning
+  // activeSequence are the APIs that actually work.
+  try {
+    if (typeof app.project.openSequence === "function") app.project.openSequence(seq.sequenceID);
+  } catch (eOpen) {}
+  try { app.project.activeSequence = seq; } catch (eSet) {}
+  try { if (seq.openInTimeline) seq.openInTimeline(); } catch (eTL) {}
+  try { if (typeof $ !== "undefined" && $.sleep) $.sleep(250); } catch (eSleep) {}
+}
+function __qeSequenceFor(seq) {
+  if (!seq) return null;
+  try { app.enableQE(); } catch (eEnable) { return null; }
+  var found = __qeSequenceLookup(seq);
+  if (found) return found;
+  __activateSequenceForQE(seq);
+  try { app.enableQE(); } catch (eEnable2) {}
+  return __qeSequenceLookup(seq);
+}
+function __findQeClipByDomClip(qeTrack, domClip) {
+  // QE track items are not the DOM clip list: they include gaps and
+  // transitions, so the DOM clip index addresses a different item as soon as
+  // anything precedes the target. Verified against 26.0.2 — a track holding
+  // three clips with one gap reported five QE items, and color_correct on DOM
+  // clip 2 landed on the gap at QE index 2 and reported success having done
+  // nothing. Match on start time instead, and skip anything that is not a clip.
+  if (!qeTrack || !domClip) return null;
+  var targetTicks = null;
+  try { targetTicks = String(domClip.start.ticks); } catch (eTarget) {}
+  var best = null, bestDelta = null;
+  for (var qi = 0; qi < qeTrack.numItems; qi++) {
+    var item = qeTrack.getItemAt(qi);
+    if (!item) continue;
+    var itemType = null;
+    try { itemType = String(item.type); } catch (eType) {}
+    if (itemType !== "Clip") continue;
+    if (targetTicks === null) return item;
+    var itemTicks = null;
+    try { itemTicks = String(item.start.ticks); } catch (eItem) {}
+    if (itemTicks === targetTicks) return item;
+    if (itemTicks !== null) {
+      var delta = Math.abs(parseInt(itemTicks, 10) - parseInt(targetTicks, 10));
+      if (best === null || delta < bestDelta) { best = item; bestDelta = delta; }
+    }
+  }
+  return best;
+}
+function __idsMatch(a, b) {
+  if (a == null || b == null) return false;
+  var sa = String(a);
+  var sb = String(b);
+  if (sa === sb) return true;
+  if (sa.toLowerCase() === sb.toLowerCase()) return true;
+  function numericId(s) {
+    if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
+    if (/^[0-9a-fA-F]+$/.test(s) && (/[a-fA-F]/.test(s) || s.charAt(0) === "0")) return parseInt(s, 16);
+    return NaN;
+  }
+  var na = numericId(sa);
+  var nb = numericId(sb);
+  return !isNaN(na) && !isNaN(nb) && na === nb;
+}
+function __normalizeSpeedRatio(speed) {
+  var n = Number(speed);
+  if (!isFinite(n) || n <= 0) return null;
+  if (n > 10) n = n / 100;
+  return n;
+}
+function __setClipSpeed(qeClip, domClip, ratio, reverse, maintainPitch, ripple) {
+  // QE setSpeed is five arguments: (multiplier, durationTicksString, reverse, pitch, ripple).
+  // Two-arg (percent, boolean) throws "Not Enough Parameters" or "Illegal Parameter type".
+  // Read ticks from the regular DOM — qeClip.duration is a timecode string, Number() of it is NaN.
+  if (!qeClip || typeof qeClip.setSpeed !== "function") {
+    throw new Error("QE clip setSpeed API unavailable");
+  }
+  var origTicks = 0;
+  try { origTicks = Number(domClip.duration.ticks); } catch (eTicks) {}
+  var targetTicks = (origTicks > 0 && ratio > 0) ? String(Math.round(origTicks / ratio)) : "";
+  var rev = Boolean(reverse);
+  var pitch = Boolean(maintainPitch);
+  var rip = Boolean(ripple);
+  try {
+    return qeClip.setSpeed(ratio, targetTicks, rev, pitch, rip);
+  } catch (ePrimary) {
+    try {
+      return qeClip.setSpeed(ratio, "", rev, pitch, rip);
+    } catch (eEmpty) {
+      throw ePrimary;
+    }
+  }
+}
+function __findClipInSequence(seq, nodeId) {
+  if (!seq) return null;
+  for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+    var track = seq.videoTracks[t];
+    for (var c = 0; c < track.clips.numItems; c++) {
+      if (__idsMatch(track.clips[c].nodeId, nodeId))
+        return { clip: track.clips[c], track: track, trackIndex: t, clipIndex: c, trackType: 'video', sequence: seq, sequenceId: seq.sequenceID, sequenceName: seq.name };
+    }
+  }
+  for (var t = 0; t < seq.audioTracks.numTracks; t++) {
+    var track = seq.audioTracks[t];
+    for (var c = 0; c < track.clips.numItems; c++) {
+      if (__idsMatch(track.clips[c].nodeId, nodeId))
+        return { clip: track.clips[c], track: track, trackIndex: t, clipIndex: c, trackType: 'audio', sequence: seq, sequenceId: seq.sequenceID, sequenceName: seq.name };
+    }
+  }
+  return null;
+}
+function __findClip(nodeId, sequenceId) {
+  if (!app.project) return null;
+  if (sequenceId) return __findClipInSequence(__findSequence(sequenceId), nodeId);
+
+  var found = __findClipInSequence(app.project.activeSequence, nodeId);
+  if (found) return found;
+
+  if (!app.project.sequences) return null;
+  for (var i = 0; i < app.project.sequences.numSequences; i++) {
+    found = __findClipInSequence(app.project.sequences[i], nodeId);
+    if (found) return found;
+  }
+  return null;
+}
+function __samePath(a, b) {
+  function normalize(value) {
+    return String(value || '').replace(/\\/g, '/').replace(/\/+$/g, '');
+  }
+  return normalize(a) === normalize(b);
+}
+function __findProjectItem(nodeId) {
+  if (!app.project || !app.project.rootItem || nodeId == null || nodeId === "") return null;
+  function matches(item) {
+    return __idsMatch(item.nodeId, nodeId) || item.name === nodeId || item.treePath === nodeId;
+  }
+  function walk(item) {
+    if (matches(item)) return item;
+    if (item.children) {
+      for (var i = 0; i < item.children.numItems; i++) {
+        var found = walk(item.children[i]);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  return walk(app.project.rootItem);
+}
+function __resolveProjectItem(id) {
+  var item = __findProjectItem(id);
+  if (item) return item;
+  var clipInfo = __findClip(id);
+  if (clipInfo && clipInfo.clip && clipInfo.clip.projectItem) return clipInfo.clip.projectItem;
+  return null;
+}
+function __foldName(s) {
+  s = String(s || "").toLowerCase();
+  var from = "àáâãäåèéêëìíîïòóôõöùúûüýÿñçß";
+  var to = "aaaaaaeeeeiiiiooooouuuuyyncs";
+  var out = "";
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    var idx = from.indexOf(ch);
+    out += idx >= 0 ? to.charAt(idx) : ch;
+  }
+  return out.split(" ").join("").split("_").join("").split("-").join("").split("/").join("");
+}
+function __canonicalName(s) {
+  var n = __foldName(s);
+  var aliases = {
+    motion: "motion", movimento: "motion", mouvement: "motion", bewegung: "motion", movimiento: "motion",
+    opacity: "opacity", opacite: "opacity", opazitat: "opacity", opacidad: "opacity", opacita: "opacity",
+    volume: "volume", volumen: "volume", lautstarke: "volume",
+    scale: "scale", escala: "scale", echelle: "scale", skalierung: "scale", scala: "scale",
+    uniformscale: "scale", scalewidth: "scale", scaleheight: "scale",
+    position: "position", posicion: "position", posizione: "position", positionx: "position", positiony: "position",
+    posx: "position", posy: "position",
+    rotation: "rotation", rotacion: "rotation", rotazione: "rotation", drehung: "rotation",
+    level: "level", nivel: "level", pegel: "level", niveau: "level", livello: "level",
+    gaussianblur: "gaussianblur", flougaussien: "gaussianblur", gausscherweichzeichner: "gaussianblur",
+    desenfocadogaussiano: "gaussianblur",
+    crop: "crop", recortar: "crop", recadrage: "crop", beschneiden: "crop",
+    lumetricolor: "lumetricolor",
+    exposure: "exposure", exposition: "exposure", belichtung: "exposure", esposizione: "exposure",
+    contrast: "contrast", contraste: "contrast", kontrast: "contrast", contrasto: "contrast",
+    saturation: "saturation", saturacion: "saturation", sattigung: "saturation", saturazione: "saturation",
+    temperature: "temperature", temperatura: "temperature", temperatur: "temperature",
+    tint: "tint", tinta: "tint",
+    highlights: "highlights", altasluces: "highlights", hauteslumieres: "highlights",
+    shadows: "shadows", sombras: "shadows", ombres: "shadows",
+    crossdissolve: "crossdissolve", disolucioncruzada: "crossdissolve", fonduenchaine: "crossdissolve",
+    uberblendung: "crossdissolve", dissolvenzacruise: "crossdissolve"
+  };
+  return aliases[n] || n;
+}
+function __namesMatch(a, b) {
+  if (a == null || b == null) return false;
+  if (String(a) === String(b)) return true;
+  return __canonicalName(a) === __canonicalName(b);
+}
+function __resolveClipProperty(clip, componentName, paramName) {
+  if (!clip || !clip.components) {
+    return { ok: false, error: "Clip has no components", available: [] };
+  }
+  var wantComp = __canonicalName(componentName);
+  var wantParam = __canonicalName(paramName);
+  var rawParam = __foldName(paramName);
+  var axis = null;
+  if (rawParam === "positionx" || rawParam === "posx") axis = "x";
+  if (rawParam === "positiony" || rawParam === "posy") axis = "y";
+  var searchComps = [wantComp];
+  if (wantParam === "opacity") searchComps.push("opacity");
+  if (wantParam === "level") searchComps.push("volume");
+  var available = [];
+  var matchedComp = null;
+  var matchedParam = null;
+  for (var i = 0; i < clip.components.numItems; i++) {
+    var comp = clip.components[i];
+    var cName = String(comp.displayName);
+    var cMatch = "";
+    try { cMatch = String(comp.matchName || ""); } catch (eM) {}
+    var props = [];
+    for (var j = 0; j < comp.properties.numItems; j++) {
+      props.push(String(comp.properties[j].displayName));
+    }
+    available.push({ component: cName, matchName: cMatch, properties: props });
+    var compHits = false;
+    for (var sc = 0; sc < searchComps.length; sc++) {
+      if (__canonicalName(cName) === searchComps[sc] || __canonicalName(cMatch) === searchComps[sc]) {
+        compHits = true;
+      }
+    }
+    if (!compHits) continue;
+    if (!matchedComp) matchedComp = comp;
+    for (var k = 0; k < comp.properties.numItems; k++) {
+      var p = comp.properties[k];
+      if (__canonicalName(p.displayName) === wantParam) {
+        matchedParam = p;
+        break;
+      }
+    }
+    if (matchedParam) break;
+  }
+  if (!matchedParam) {
+    return {
+      ok: false,
+      error: "Parameter " + paramName + " not found in component " + componentName,
+      available: available
+    };
+  }
+  return { ok: true, component: matchedComp, property: matchedParam, axis: axis, available: available };
+}
+function __coercePropertyValue(property, value, axis) {
+  var current = null;
+  try { current = property.getValue(); } catch (eGet) {}
+  var currentIsArray = Object.prototype.toString.call(current) === "[object Array]";
+  var valueIsArray = Object.prototype.toString.call(value) === "[object Array]";
+  if (axis && currentIsArray) {
+    var next = [];
+    for (var i = 0; i < current.length; i++) next[i] = current[i];
+    if (axis === "x") next[0] = valueIsArray ? value[0] : value;
+    if (axis === "y") next[1] = valueIsArray ? value[value.length > 1 ? 1 : 0] : value;
+    return next;
+  }
+  if (currentIsArray && !valueIsArray && typeof value === "number") {
+    if (current.length >= 2) return [value, value];
+    return [value];
+  }
+  if (!currentIsArray && valueIsArray) return value[0];
+  return value;
+}
+function __secondsToTimecode(seconds, fps) {
+  fps = Number(fps);
+  if (!isFinite(fps) || fps <= 0) fps = 30;
+  var frameRate = Math.round(fps);
+  var totalFrames = Math.round(Number(seconds) * fps);
+  if (!isFinite(totalFrames) || totalFrames < 0) totalFrames = 0;
+  var f = totalFrames % frameRate;
+  var totalSeconds = Math.floor(totalFrames / frameRate);
+  var s = totalSeconds % 60;
+  var totalMinutes = Math.floor(totalSeconds / 60);
+  var m = totalMinutes % 60;
+  var h = Math.floor(totalMinutes / 60);
+  function pad(n) { return (n < 10 ? "0" : "") + String(n); }
+  return pad(h) + ":" + pad(m) + ":" + pad(s) + ":" + pad(f);
+}
+var __TICKS_PER_SECOND = 254016000000;
+function __secondsToTicks(seconds) {
+  return String(Math.round(Number(seconds || 0) * __TICKS_PER_SECOND));
+}
+function __ticksToSeconds(ticks) {
+  if (ticks === undefined || ticks === null || ticks === "") return 0;
+  if (typeof ticks === "object") {
+    try {
+      if (typeof ticks.seconds === "number" && isFinite(ticks.seconds)) return ticks.seconds;
+    } catch (eSeconds) {}
+    try {
+      if (ticks.ticks !== undefined && ticks.ticks !== null) return __ticksToSeconds(ticks.ticks);
+    } catch (eTicks) {}
+    return 0;
+  }
+  if (typeof ticks === "number") {
+    if (!isFinite(ticks)) return 0;
+    return Math.abs(ticks) >= 1000000 ? ticks / __TICKS_PER_SECOND : ticks;
+  }
+  var parsed = parseInt(String(ticks), 10);
+  if (!isFinite(parsed)) return 0;
+  return Math.abs(parsed) >= 1000000 ? parsed / __TICKS_PER_SECOND : parsed;
+}
+function __coerceProjectItemId(value) {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    return String(value.projectItemId || value.nodeId || value.id || value.clipId || value.itemId || "");
+  }
+  return String(value);
+}
+function __expandIdList(value) {
+  var out = [];
+  function pushId(id) {
+    if (id == null) return;
+    var s = String(id).replace(/^s+|s+$/g, "");
+    if (!s) return;
+    for (var i = 0; i < out.length; i++) if (out[i] === s) return;
+    out.push(s);
+  }
+  function looksLikeId(text) {
+    return /^[0-9a-fA-F-]+$/.test(text);
+  }
+  function walk(v) {
+    if (v == null || v === "") return;
+    if (typeof v === "string") {
+      var s = v.replace(/^s+|s+$/g, "");
+      if (!s) return;
+      if ((s.charAt(0) === "[" && s.charAt(s.length - 1) === "]") || (s.charAt(0) === "{" && s.charAt(s.length - 1) === "}")) {
+        try { walk(__mcpParse(s)); return; } catch (eParse) {}
+      }
+      if (s.indexOf(",") >= 0) {
+        var parts = s.split(",");
+        var allIds = parts.length > 1;
+        for (var pi = 0; pi < parts.length && allIds; pi++) {
+          var part = parts[pi].replace(/^s+|s+$/g, "").replace(/^"+|"+$/g, "");
+          if (part && !looksLikeId(part)) allIds = false;
+        }
+        if (allIds) {
+          for (var pj = 0; pj < parts.length; pj++) {
+            walk(parts[pj].replace(/^s+|s+$/g, "").replace(/^"+|"+$/g, ""));
+          }
+          return;
+        }
+      }
+      pushId(s);
+      return;
+    }
+    if (typeof v === "object") {
+      var isArr = false;
+      try { isArr = v instanceof Array; } catch (eArr) {}
+      if (!isArr) {
+        try { isArr = typeof v.length === "number" && typeof v.splice === "function"; } catch (eLen) {}
+      }
+      if (isArr) {
+        for (var ai = 0; ai < v.length; ai++) walk(v[ai]);
+        return;
+      }
+      walk(__coerceProjectItemId(v));
+    }
+  }
+  walk(value);
+  return out;
+}
+function __qeSequenceForRetry(seq) {
+  var found = __qeSequenceFor(seq);
+  if (found) return found;
+  __activateSequenceForQE(seq);
+  try { app.enableQE(); } catch (eEnable) {}
+  found = __qeSequenceLookup(seq);
+  if (found) return found;
+  try {
+    var active = qe.project.getActiveSequence();
+    if (!active || !seq) return null;
+    if (String(active.guid) === String(seq.sequenceID)) return active;
+    if (String(active.name) === String(seq.name)) return active;
+  } catch (eActive) {}
+  return null;
+}
+function __findQeNamed(kind, name) {
+  var getters = {
+    videoEffect: "getVideoEffectByName",
+    audioEffect: "getAudioEffectByName",
+    videoTransition: "getVideoTransitionByName",
+    audioTransition: "getAudioTransitionByName"
+  };
+  var lists = {
+    videoEffect: "getVideoEffectList",
+    audioEffect: "getAudioEffectList",
+    videoTransition: "getVideoTransitionList",
+    audioTransition: "getAudioTransitionList"
+  };
+  try { app.enableQE(); } catch (eEnable) { return null; }
+  if (!qe || !qe.project) return null;
+  var getter = getters[kind];
+  var listName = lists[kind];
+  if (!getter) return null;
+  var direct = null;
+  try { direct = qe.project[getter](name); } catch (eDirect) {}
+  if (direct) return direct;
+  var list = [];
+  try { list = qe.project[listName]() || []; } catch (eList) {}
+  for (var i = 0; i < list.length; i++) {
+    if (__namesMatch(list[i], name)) {
+      try {
+        var found = qe.project[getter](list[i]);
+        if (found) return found;
+      } catch (eFound) {}
+    }
+  }
+  return null;
+}

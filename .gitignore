@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Env / secrets — NEVER commit
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime state
+audit.log
+audit-*.jsonl
+jobs/
+*.pid
+
+# Generated assets live on the user's PC, not in git
+# (PREMIERE_MCP_ASSETS default: C:\Shotbyx\AI_Clips)
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test artifacts
+coverage/
+.nyc_output/

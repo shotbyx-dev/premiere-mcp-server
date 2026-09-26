@@ -1,4 +1,8 @@
-# premiere-mcp-server
+# PremierePilot by Shotbyx
+
+**Product name: PremierePilot** (technical repo name: `premiere-mcp-server` — to
+rename the product, search-replace "PremierePilot" across `site/`, `docs/`, and
+this README).
 
 **Created by Shotbyx.**
 
@@ -66,15 +70,25 @@ signed in, PC set to never sleep (see below).
 
 ## Clients
 
-- **Muse (this project’s primary driver):** use the bundled skill —
-  `~/workspace/skills/premiere-mcp/SKILL.md`. The skill’s CLI posts JSON-RPC
-  to the public URL with `Authorization: Bearer <PREMIERE_MCP_TOKEN>`.
-- **ChatGPT:** works through its MCP connector (Developer mode, paid plan),
-  **but** ChatGPT connectors do not support custom API-key headers, so the
-  static bearer-token auth in this build is **not directly usable by ChatGPT**.
-  Serving ChatGPT requires the planned OAuth 2.1 + Dynamic Client Registration
-  layer (see "Roadmap"). Until then: Muse CLI, or any client that can send an
-  `Authorization: Bearer` header.
+**Meta Muse (recommended):** PremierePilot is being submitted to the public
+connector platform at [muse.ai/platform](https://muse.ai/platform) as an
+"Existing MCP" connector. Until it's listed, connect today via Muse's
+custom-connector path (paste your server URL in chat — about a minute, no
+review). A bundled skill also ships in `~/workspace/skills/premiere-mcp/`
+(`SKILL.md`), whose CLI posts JSON-RPC to the public URL with
+`Authorization: Bearer <PREMIERE_MCP_TOKEN>`.
+
+**ChatGPT:** there is no public app-directory path for a self-hosted product
+(OpenAI's directory requires one fixed URL for all users; every user runs their
+own server). ChatGPT users connect via **developer-mode manual setup**: paid
+plan → Settings → enable Developer mode → chatgpt.com/plugins → **+** → paste
+your server URL → choose OAuth → create. (The OAuth 2.1 + Dynamic Client
+Registration layer that powers the OAuth step is on the roadmap — see below.)
+
+**Claude:** connects through a custom connector with OAuth.
+
+Any other client that can send an `Authorization: Bearer` header works with the
+current build.
 
 ## Configuration (`.env`)
 

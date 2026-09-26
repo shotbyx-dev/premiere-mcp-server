@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PremierePilot by Shotbyx — Edit by talking.</title>
+<meta name="description" content="PremierePilot by Shotbyx: a free, open-source MCP server that lets your AI assistant edit in Adobe Premiere Pro and After Effects by plain chat prompts — right on your own PC.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">PremierePilot</span>
+      <span class="brand-by">by Shotbyx</span>
+    </a>
+    <nav class="topnav">
+      <a href="#how">How it works</a>
+      <a href="#capabilities">What it can do</a>
+      <a href="#security">Security</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-sm" href="#install">Install</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">PremierePilot &middot; by Shotbyx</p>
+        <h1>Edit by talking.</h1>
+        <p class="lede">PremierePilot runs on your Windows editing PC and hands your AI assistant the controls to <strong>Adobe Premiere Pro</strong> and <strong>After Effects</strong> — importing, timeline cuts, effects, beat-synced edits, renders — by plain chat prompts. From your couch, your phone, or across the world.</p>
+        <div class="hero-ctas">
+          <a class="btn" href="#install">Install it free</a>
+          <a class="btn btn-ghost" href="#demo">Watch it work</a>
+        </div>
+        <ul class="hero-facts">
+          <li><strong>59 tools</strong> — 35 Premiere Pro, 23 After Effects, plus a searchable catalog</li>
+          <li><strong>100% free &amp; open source</strong> (MIT) — no per-clip fees, no subscriptions</li>
+          <li><strong>Your machine, your rules</strong> — runs locally, full audit log of everything it does</li>
+        </ul>
+      </div>
+      <div class="hero-demo" id="demo">
+        <div class="chat-window" role="img" aria-label="Demo conversation: a user asks their AI to cut three clips to the beat and export the result.">
+          <div class="chat-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="chat-title">PremierePilot demo</span><span class="replay" id="replay" role="button" tabindex="0" title="Replay demo">&#8635;</span></div>
+          <div class="chat-body" id="chatBody"></div>
+        </div>
+        <p class="demo-caption">Not a mockup — these are real prompts users send every day.</p>
+      </div>
+    </div>
+    <div class="filmstrip" aria-hidden="true">
+      <div class="strip"></div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>From install to "done" in about fifteen minutes.</h2>
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num">1</span>
+          <h3>Install it on your PC</h3>
+          <p>Run one PowerShell installer. It sets up the server, drops tiny bridge panels into Premiere Pro and After Effects, installs ffmpeg, and starts everything when Windows logs on. Windows 10/11, Premiere Pro + After Effects, Adobe signed in — that's the whole list.</p>
+        </li>
+        <li class="step">
+          <span class="step-num">2</span>
+          <h3>Connect your AI</h3>
+          <p>The installer creates a private tunnel to your PC (Cloudflare Tunnel — no port forwarding, no open ports) and a secret bearer token. Paste the tunnel URL and the token into your AI client once, and it's paired.</p>
+        </li>
+        <li class="step">
+          <span class="step-num">3</span>
+          <h3>Direct by chat</h3>
+          <p>"Cut these clips to the beat, add a cross dissolve between each, export to MP4." Your assistant translates the words into real Premiere commands, executed right on your timeline — and tells you when it's done.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- CAPABILITIES -->
+  <section class="section section-alt" id="capabilities">
+    <div class="wrap">
+      <p class="kicker">What it can do</p>
+      <h2>A full editing suite, behind a sentence.</h2>
+      <p class="section-sub">59 tools, driven by your assistant through one server. Here's a taste of the reel.</p>
+      <div class="cards">
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#127916;</div>
+          <h3>Timeline editing</h3>
+          <p>Open and create projects, build sequences, insert and overwrite clips, trim, move, split, delete, set markers, read and move the playhead — the everyday edit, without touching the timeline yourself.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#127925;</div>
+          <h3>Beat-synced cuts</h3>
+          <p>A built-in beat detector analyzes your track right on your PC — BPM, beat times to millisecond precision, confidence score — and razors your footage exactly on the downbeats. Music-video edits in one prompt.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#10024;</div>
+          <h3>Effects &amp; transitions</h3>
+          <p>Apply effects, list what's available, add transitions between clips, animate properties with keyframes, adjust audio levels and mute tracks — even script custom effects via the raw escape hatch.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#127917;</div>
+          <h3>AI video from stills</h3>
+          <p>Your AI assistant generates video from a still image on its own side — no paid APIs, no API keys, no per-clip fees — then the server downloads and imports the clip straight into your project.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#128396;</div>
+          <h3>After Effects comps</h3>
+          <p>Create compositions, text, shapes, solids and cameras; duplicate and delete layers; set properties and keyframes; write expressions; apply effects; and queue renders with <code>aerender</code> — all by chat.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon" aria-hidden="true">&#128190;</div>
+          <h3>Background exports</h3>
+          <p>Queue exports through Adobe Media Encoder, check the render queue, export still frames, and save projects — then go make coffee. Your assistant reports back when the file is on disk.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section class="section" id="security">
+    <div class="wrap">
+      <p class="kicker">Security &amp; trust</p>
+      <h2>It's your machine. It stays your machine.</h2>
+      <div class="trust-grid">
+        <div class="trust">
+          <h3>&#128274; Runs on YOUR hardware</h3>
+          <p>The server binds to 127.0.0.1 only. The only way in from the outside is the encrypted tunnel <em>you</em> create, guarded by <em>your</em> bearer token. No cloud dashboard, no third-party service sitting in the middle.</p>
+        </div>
+        <div class="trust">
+          <h3>&#128065; Full audit log, always</h3>
+          <p>Every single tool call is appended to a local JSONL audit log — timestamp, tool, arguments, outcome. Tokens and sensitive payloads are redacted. If your AI did something, it's in the log.</p>
+        </div>
+        <div class="trust">
+          <h3>&#9995; Destructive actions need you</h3>
+          <p>Your assistant is instructed to confirm before doing anything it can't undo — deleting clips, overwriting exports, closing unsaved projects. And you can stop the whole thing at any moment.</p>
+        </div>
+        <div class="trust">
+          <h3>&#128465; Revoke anytime</h3>
+          <p>Rotate the token in one command and every client is locked out instantly. Or run the uninstaller: panels, scheduled task, and tunnel service come out, and it's like it was never there.</p>
+        </div>
+      </div>
+      <p class="fineprint">Honest limits: the bridge gives your AI the same file access Premiere Pro itself has (your project files, media folders, exports). It cannot see your screen or move your mouse — it drives via plugin commands only. Your footage never leaves your machine unless you explicitly ask the AI to generate or fetch something from the web. Read the <a href="https://github.com/shotbyx-dev/premiere-mcp-server">full security notes on GitHub</a>.</p>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section class="section section-alt" id="install">
+    <div class="wrap">
+      <p class="kicker">Get started</p>
+      <h2>Free forever. Open source forever.</h2>
+      <div class="install-grid">
+        <div class="install-steps">
+          <ol>
+            <li><strong>Clone the repo</strong> on your Windows PC:<br><code>git clone https://github.com/shotbyx-dev/premiere-mcp-server.git</code></li>
+            <li><strong>Run the installer</strong> in PowerShell:<br><code>.\scripts\install-windows.ps1</code><br><span class="muted">With remote access via Cloudflare Tunnel:</span><br><code>.\scripts\install-windows.ps1 -TunnelToken "YOUR_TOKEN" -PublicHostname "https://your-tunnel-url.example.com"</code></li>
+            <li><strong>Open the bridge panels</strong> — Premiere: <em>Window &gt; Extensions &gt; MCP Bridge</em>. After Effects: <em>Window &gt; MCP Bridge Auto.jsx</em> (keep auto-run ON).</li>
+            <li><strong>Connect your AI client</strong> — give it your tunnel URL and the <code>PREMIERE_MCP_TOKEN</code> from your <code>.env</code>, then ask it to <em>verify_premiere_connection</em>.</li>
+          </ol>
+          <p class="muted">Lead distribution is <strong>Meta Muse</strong>: PremierePilot is being submitted to the public connector platform at <a href="https://muse.ai/platform">muse.ai/platform</a> — once listed, connecting is one click. Today, connect via Muse's custom-connector path (paste your server URL in chat — about a minute, no review). <strong>ChatGPT</strong> connects via <em>developer-mode manual setup</em> (paid plan: Settings → enable Developer mode → chatgpt.com/plugins → + → paste your URL → choose OAuth → create). <strong>Claude</strong> connects through a custom connector with OAuth. The OAuth 2.1 + Dynamic Client Registration layer that powers these flows is landing now; bearer-token auth already works with any client that can send an <code>Authorization: Bearer</code> header.</p>
+        </div>
+        <aside class="install-card">
+          <h3>First-night checklist</h3>
+          <ul class="checklist">
+            <li>PC set to <strong>never sleep</strong> on AC power</li>
+            <li>Stay <strong>signed in</strong> to Creative Cloud</li>
+            <li>Keep Premiere/AE <strong>open</strong> in a logged-in desktop session</li>
+            <li><strong>Dismiss modal dialogs</strong> promptly — they're the #1 thing that wedges the bridge</li>
+          </ul>
+          <a class="btn" href="https://github.com/shotbyx-dev/premiere-mcp-server">Get PremierePilot on GitHub</a>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <p class="kicker">FAQ</p>
+      <h2>Asked often, answered honestly.</h2>
+      <div class="faq-list">
+        <details class="faq">
+          <summary>Does it work with Premiere Pro 2025 / 2026?</summary>
+          <p>PremierePilot targets the current Creative Cloud releases of Premiere Pro and After Effects. Adobe occasionally changes its scripting surface in major releases — when that happens, bridge updates ship with the server, so keep the server (and the bridge panels) updated. If a brand-new version breaks something, <a href="https://github.com/shotbyx-dev/premiere-mcp-server">open an issue</a> with your app version.</p>
+        </details>
+        <details class="faq">
+          <summary>Does my PC need to be on?</summary>
+          <p>Yes. The server, Premiere Pro, and After Effects all run on your Windows PC — there's no cloud copy of your edit. Keep the PC on, plugged in, set to never sleep, and keep the Adobe apps open in a logged-in desktop session. RDP counts as a logged-in session.</p>
+        </details>
+        <details class="faq">
+          <summary>Can it see my screen or move my mouse?</summary>
+          <p>No — and that's by design. PremierePilot drives the apps through their official plugin/scripting bridges (CEP panels and ExtendScript), not through screen capture or simulated input. Your AI assistant can read project structure, timeline state, and exported frames — it cannot watch your desktop or click around.</p>
+        </details>
+        <details class="faq">
+          <summary>What does it cost?</summary>
+          <p>PremierePilot itself is free and open source (MIT) — no subscription, no per-clip fees, no upsells. You bring your own AI assistant, so whatever that assistant costs (e.g. your Muse plan) is the only thing you pay.</p>
+        </details>
+        <details class="faq">
+          <summary>Is my footage uploaded anywhere?</summary>
+          <p>No. Everything runs locally on your PC — your media files, your project, your exports. The only exception is when you explicitly ask your AI assistant to generate or fetch something from the web (like an AI-generated clip), and even then only that clip is downloaded to your machine.</p>
+        </details>
+        <details class="faq">
+          <summary>Which AI assistants work with it?</summary>
+          <p><strong>Meta Muse</strong> is the lead platform: PremierePilot is being submitted to the public connector directory at <a href="https://muse.ai/platform">muse.ai/platform</a>, and until it's listed you can already connect today through Muse's custom-connector path — paste your server URL in chat (about a minute, no review). <strong>ChatGPT</strong> connects through <em>developer-mode manual setup</em> (paid plan required — see the FAQ below). <strong>Claude</strong> connects via a custom connector with OAuth. Any client that can send an <code>Authorization: Bearer</code> header works with the current build.</p>
+        </details>
+        <details class="faq">
+          <summary>Why isn't PremierePilot in ChatGPT's app directory?</summary>
+          <p>Because it architecturally can't be — and we're being straight about that. OpenAI's directory requires one fixed URL shared by all users, but every PremierePilot user runs their own server on their own PC, so there's no single URL to list. ChatGPT users instead connect through <strong>developer-mode manual setup</strong>: paid ChatGPT plan → Settings → enable Developer mode → chatgpt.com/plugins → <strong>+</strong> → paste your server URL → choose OAuth → create. That path is fully supported and works per-user.</p>
+        </details>
+        <details class="faq">
+          <summary>What if the AI does something I don't like?</summary>
+          <p>Check the audit log — every tool call is recorded with its arguments and outcome. Your assistant is instructed to confirm destructive actions before doing them, and you can revoke access instantly by rotating the token or uninstalling.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <p class="footer-brand">PremierePilot &middot; <strong>Created by Shotbyx</strong></p>
+    <p class="footer-links">
+      <a href="https://github.com/shotbyx-dev/premiere-mcp-server">GitHub</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="https://github.com/shotbyx-dev/premiere-mcp-server">Docs</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="privacy.html">Privacy Policy</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="terms.html">Terms of Service</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="https://github.com/shotbyx-dev/premiere-mcp-server">Report an issue</a>
+    </p>
+    <p class="footer-note">Free and open source under the MIT License. Bridge panels adapted from community MIT projects — see THIRD-PARTY-NOTICES.md.</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

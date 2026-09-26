@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — PremierePilot by Shotbyx</title>
+<meta name="description" content="PremierePilot privacy policy: a self-hosted product — no footage or project data collected by Shotbyx.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">PremierePilot</span>
+      <span class="brand-by">by Shotbyx</span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#capabilities">What it can do</a>
+      <a href="index.html#faq">FAQ</a>
+      <a class="btn btn-sm" href="index.html#install">Install</a>
+    </nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="wrap narrow legal">
+    <p class="kicker">Privacy Policy</p>
+    <h1>Your footage stays yours.</h1>
+    <p class="legal-date"><strong>Last updated:</strong> September 26, 2026</p>
+
+    <p>PremierePilot by Shotbyx is a <strong>self-hosted</strong> product. The server runs
+    on your own Windows PC, drives Adobe apps on that same PC, and there is no
+    Shotbyx cloud service sitting in the middle. That architecture shapes everything
+    in this policy.</p>
+
+    <h2>What Shotbyx collects: nothing</h2>
+    <p>Shotbyx does not collect, store, or have access to:</p>
+    <ul>
+      <li>your footage, project files, timelines, or exports;</li>
+      <li>your prompts or your AI assistant's responses;</li>
+      <li>your bearer token or tunnel credentials;</li>
+      <li>your audit log (it lives on your PC — see below).</li>
+    </ul>
+    <p>There is no account system, no sign-up, and no analytics or telemetry in the
+    software. If analytics are ever added, they will be opt-in and disclosed here
+    first.</p>
+
+    <h2>What your AI provider processes</h2>
+    <p>When you connect an AI assistant (Meta, OpenAI, Anthropic, or another provider)
+    to your server, your prompts — and the information needed to carry them out,
+    such as clip names, timeline state, and exported frame data — are processed by
+    that provider under <em>their</em> privacy policy. Shotbyx cannot control how
+    your AI provider handles your data, so review their policy before connecting.</p>
+
+    <h2>What stays on your PC</h2>
+    <ul>
+      <li><strong>Everything.</strong> Media, projects, exports, and the
+      <code>audit.jsonl</code> log of every tool call remain on your machine
+      (default: <code>C:\Shotbyx\</code>).</li>
+      <li>Tokens are generated locally by the installer and never leave your PC
+      except when you paste them into your own AI client.</li>
+    </ul>
+
+    <h2>When data leaves your PC</h2>
+    <p>Only when <em>you</em> explicitly ask your AI assistant to generate or fetch
+    something from the web (for example, an AI-generated clip). In that case the
+    requested media is downloaded to your PC via the server's import tools. Shotbyx
+    itself never initiates such transfers.</p>
+
+    <h2>Third-party components</h2>
+    <p>The remote-access path uses Cloudflare Tunnel (Cloudflare's software and
+    policies apply to the tunnel itself), and the bridge panels are adapted from
+    community MIT projects (see THIRD-PARTY-NOTICES.md in the repo). No other
+    third parties are involved.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes, the new version will be published here with an
+    updated date. Continued use of the software after a change means you accept it.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy: open an issue at
+    <a href="https://github.com/shotbyx-dev/premiere-mcp-server">github.com/shotbyx-dev/premiere-mcp-server</a>.</p>
+
+    <p class="legal-back"><a href="index.html">&larr; Back to PremierePilot</a></p>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <p class="footer-brand">PremierePilot &middot; <strong>Created by Shotbyx</strong></p>
+    <p class="footer-links">
+      <a href="index.html">Home</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="privacy.html">Privacy Policy</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="terms.html">Terms of Service</a>
+    </p>
+    <p class="footer-note">Free and open source under the MIT License.</p>
+  </div>
+</footer>
+
+</body>
+</html>
